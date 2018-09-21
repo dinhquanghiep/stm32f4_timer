@@ -44,6 +44,7 @@
 volatile uint32_t time_ms = 0;
 static volatile uint8_t tim8_update_num = 0;
 static volatile uint32_t freq_clock_TIM1_CH1 = 0;
+static volatile uint32_t duty_clock_TIM1_CH1 = 0;
 static volatile uint32_t freq_clock_TIM1_CH2 = 0;
 static volatile uint32_t freq_clock_TIM8_CH3 = 0;
 // static volatile uint32_t duty_clock1 = 0;
@@ -178,13 +179,18 @@ static void timer1_config(void){
   TIM_ICInitStruct.TIM_ICPrescaler = TIM_ICPSC_DIV1;
   TIM_ICInitStruct.TIM_ICFilter = 0;
   TIM_ICInit(TIM1, &TIM_ICInitStruct);
+
   /* The input signal is same as CH1 */
   TIM_ICInitStruct.TIM_Channel = TIM_Channel_2;
   TIM_ICInitStruct.TIM_ICPolarity = TIM_ICPolarity_Falling;
   TIM_ICInitStruct.TIM_ICSelection = TIM_ICSelection_IndirectTI;
   TIM_ICInit(TIM1, &TIM_ICInitStruct);
 
-  TIM_ITConfig(TIM1, TIM_IT_CC1 | TIM_IT_CC2, ENABLE);
+  TIM_SelectInputTrigger(TIM1, TIM_TS_TI1FP1);
+  TIM_SelectSlaveMode(TIM1, TIM_SlaveMode_Reset);
+  TIM_SelectMasterSlaveMode(TIM1, TIM_MasterSlaveMode_Enable);
+
+  TIM_ITConfig(TIM1, TIM_IT_CC1, ENABLE);
   TIM_Cmd(TIM1, ENABLE);
 }
 
@@ -226,7 +232,7 @@ static void timer8_config(void){
 }
 
 /** @brief  Config for NVIC
-  *         TIM1 input caputer for CH1 and CH2
+  *         TIM1 input capture for CH1 PWM input mode
   *         TIM8 input capture for CH3 and update
   * @param  None
   * 
@@ -276,11 +282,6 @@ int main(void) {
 
 void TIM1_CC_IRQHandler(void) {
   static uint32_t capture1_CH1 = 0;
-  static uint32_t capture2_CH1 = 0;
-  static uint32_t capture1_CH2 = 0;
-  static uint32_t capture2_CH2 = 0;
-  static uint8_t capture_number1 = 0;
-  static uint8_t capture_number2 = 0;
   
   #if DEBUG
   if (TIM_GetFlagStatus(TIM1, TIM_FLAG_CC1OF) || TIM_GetFlagStatus(TIM1, TIM_FLAG_CC2OF)) {
@@ -291,35 +292,14 @@ void TIM1_CC_IRQHandler(void) {
   #endif
 
   if (TIM_GetITStatus(TIM1, TIM_IT_CC1) != RESET) {
-    if (capture_number1 == 0) {
-      capture1_CH1 = TIM_GetCapture1(TIM1);
-      capture_number1++;
-    } else {
-      capture2_CH1 = TIM_GetCapture1(TIM1);
-      if (capture2_CH1 > capture1_CH1) {
-        capture2_CH1 -= capture1_CH1;
-      } else {
-        capture2_CH1 += 0xFFFF - capture1_CH1;
-      }
-      freq_clock_TIM1_CH1 = 168000000 / capture2_CH1;
-      capture_number1 = 0;
+    capture1_CH1 = TIM_GetCapture1(TIM1);
+    if (capture1_CH1 != 0) {
+      freq_clock_TIM1_CH1 = 168000000 / capture1_CH1;
+      /* The CCxIF is cleared after reading the value from CCRx */
+      uint32_t duty_high = TIM_GetCapture2(TIM1);
+      duty_clock_TIM1_CH1 = duty_high * 100 / (capture1_CH1 + duty_high);
     }
     TIM_ClearITPendingBit(TIM1, TIM_IT_CC1);
-  } else if (TIM_GetITStatus(TIM1, TIM_IT_CC2) != RESET) {
-    if (capture_number2 == 0) {
-      capture1_CH2 = TIM_GetCapture2(TIM1);
-      capture_number2++;
-    } else {
-      capture2_CH2 = TIM_GetCapture2(TIM1);
-      if (capture2_CH2 > capture1_CH2) {
-        capture2_CH2 -= capture1_CH2;
-      } else {
-        capture2_CH2 += 0xFFFF - capture1_CH2;
-      }
-      freq_clock_TIM1_CH2 = 168000000 / capture2_CH2;
-      capture_number2 = 0;
-    }
-    TIM_ClearITPendingBit(TIM1, TIM_IT_CC2);
   }
 }
 

@@ -34,7 +34,7 @@
 /** @addtogroup Template_Project
   * @{
   */
-
+extern volatile uint32_t time_ms;
 /* Private typedef -----------------------------------------------------------*/
 /* Private define ------------------------------------------------------------*/
 /* Private macro -------------------------------------------------------------*/
@@ -142,6 +142,7 @@ void PendSV_Handler(void)
 void SysTick_Handler(void)
 {
   // TimingDelay_Decrement();
+  time_ms++;
 }
 
 /******************************************************************************/
